@@ -1,13 +1,10 @@
-# 定义变量：编译器用 gcc
 CC = gcc
-
-# 定义目标文件：我们要生成的程序叫 app
 TARGET = app
+# 这里的 *.c 代表当前目录下所有的 .c 文件，以后你加文件它自动识别
+SRCS = file_io.c 
 
-# 编译规则：app 依赖于 hello.c
-$(TARGET): hello.c
-	$(CC) hello.c -o $(TARGET)
+$(TARGET): $(SRCS)
+	$(CC) $(SRCS) -o $(TARGET)
 
-# 清理规则：输入 make clean 就会删掉生成的程序
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) sensor_data.txt
