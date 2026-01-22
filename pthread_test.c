@@ -1,43 +1,53 @@
 #include <stdio.h>
-#include <pthread.h> // 必须包含这个头文件
-#include <unistd.h>  // 包含 sleep
+#include <pthread.h>
+#include <unistd.h>
 
-// --- 线程 1：模拟传感器采集 (切菜工) ---
-// 线程函数的固定格式：返回 void*，参数 void*
-void *thread_sensor(void *arg) {
-    while (1) {
-        printf(">>> [传感器] 正在采集数据... (1秒一次)\n");
-        sleep(1); // 模拟采集只需要 1 秒
+int g_counter = 0; 
+
+// 1. 定义一把“锁” (Mutex)
+pthread_mutex_t lock;
+
+void *thread_inc(void *arg) {
+    for (int i = 0; i < 1000000; i++) {
+        // 2. 进门加锁：如果别人锁了，我就在这死等
+        pthread_mutex_lock(&lock);
+        
+        g_counter++; // 现在的操作是安全的（原子的）
+        
+        // 3. 出门解锁：让给下一个人
+        pthread_mutex_unlock(&lock);
     }
     return NULL;
 }
 
-// --- 线程 2：模拟写硬盘 (厨师) ---
-void *thread_storage(void *arg) {
-    while (1) {
-        printf("<<< [存储] 正在写入磁盘... (2秒一次)\n");
-        sleep(2); // 模拟写硬盘很慢，需要 2 秒
+void *thread_dec(void *arg) {
+    for (int i = 0; i < 1000000; i++) {
+        // 同样要加锁
+        pthread_mutex_lock(&lock);
+        
+        g_counter--; 
+        
+        pthread_mutex_unlock(&lock);
     }
     return NULL;
 }
 
 int main() {
-    pthread_t t1, t2; // 定义两个线程 ID 变量
+    pthread_t t1, t2;
 
-    // 1. 创建线程 (让它们开始跑)
-    // 参数：&线程ID, 属性(NULL), 函数名, 函数参数(NULL)
-    if (pthread_create(&t1, NULL, thread_sensor, NULL) != 0) {
-        perror("创建传感器线程失败");
-    }
+    // A. 初始化锁 (必须做！)
+    pthread_mutex_init(&lock, NULL);
 
-    if (pthread_create(&t2, NULL, thread_storage, NULL) != 0) {
-        perror("创建存储线程失败");
-    }
+    pthread_create(&t1, NULL, thread_inc, NULL);
+    pthread_create(&t2, NULL, thread_dec, NULL);
 
-    // 2. 主线程不能死 (主线程死了，小弟们都会被强制关闭)
-    // 这里我们用 pthread_join 等待它们结束 (虽然它们是死循环)
     pthread_join(t1, NULL);
     pthread_join(t2, NULL);
+    
+    // B. 用完销毁锁
+    pthread_mutex_destroy(&lock);
+
+    printf("最终结果: %d (加了锁，一定是 0)\n", g_counter);
 
     return 0;
 }
