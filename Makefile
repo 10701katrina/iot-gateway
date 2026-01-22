@@ -1,7 +1,7 @@
 CC = gcc
 TARGET = app
 # 改成新文件名
-SRCS = pthread_test.c 
+SRCS = producer_consumer.c
 
 # 重点：新增链接库参数 -lpthread
 LIBS = -lpthread
