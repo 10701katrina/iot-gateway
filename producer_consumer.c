@@ -39,17 +39,17 @@ void *producer(void *arg) {
         g_data = i; // 生产数据
         printf("[生产者] 采集到数据: %d，发送通知！\n", g_data);
         
-        // 2. 敲锣打鼓，唤醒消费者
+        // 2. 敲锣打鼓，唤醒消费者(把线程的状态从 “阻塞 (Blocked)” 改为 “就绪 (Ready)”。)
         // pthread_cond_signal 负责把等待在 cond_var 上的线程叫醒
-        pthread_cond_signal(&cond_var);
-        
-        pthread_mutex_unlock(&lock); // 3. 解锁
+        pthread_cond_signal(&cond_var);//此时锁还在生产者手里!!!
+        //注意：如果你的系统里有好几个条件变量（比如 cond_temp 温度报警, cond_motion 运动报警），你传哪个地址，就只叫醒等那个条件的人。
+        pthread_mutex_unlock(&lock); // 3. 解锁,生产者彻底放手
     }
     return NULL;
 }
 
 int main() {
-    pthread_t t1, t2;
+    pthread_t t1, t2;//定义了两个用来装线程 ID 的变量
 
     // 初始化锁和条件变量
     pthread_mutex_init(&lock, NULL);
@@ -58,13 +58,19 @@ int main() {
     pthread_create(&t1, NULL, consumer, NULL); // 先启动消费者，让他去等着
     pthread_create(&t2, NULL, producer, NULL);
 
-    pthread_join(t2, NULL); // 等待生产者结束
+    pthread_join(t2, NULL); // 等待生产者结束，主程序参与join
+    //第二个传参：void **__thread_return (作业本地址)【双重指针】
+    //它的作用是：让子线程在结束时（通过 return 或 pthread_exit），能把一个结果传回来给主线程。如果不需要结果，这里直接传 NULL。 
     
     // 这里的逻辑稍微简化了，实际项目中需要让消费者也优雅退出
     // 为了演示简单，我们就不等待消费者死循环了
     
+    //
+
     pthread_mutex_destroy(&lock);
     pthread_cond_destroy(&cond_var);
+
+
 
     return 0;
 }
