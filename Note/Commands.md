@@ -1,4 +1,4 @@
-## 1. producer_consumer.c 线程函数
+# 1. producer_consumer.c 线程函数
 * 你只需要记住以下 4 组 核心函数。这几组函数构成了 Linux 多线程编程的 90% 场景，也是面试中手写代码（Whiteboard Coding）最常考的内容：
 
     * 基础管理：
@@ -50,11 +50,49 @@
         逻辑：普通锁太浪费了（读的人也要排队）。读写锁允许多个人同时读，但只要有人想写，就必须独占。
 
 
-## 2. File_io.c
-* int fd; 
-    * 核心概念：文件描述符 (File Descriptor)
-    * 通俗理解：这就是我们之前说的“号码牌”。
-        * 在 Linux 内核里，它不会记录“sensor_data.txt”这个文件名，它只认 fd 这个数字（比如 3）。
-        * 以后所有的操作（写、读、关），你都只需要向系统出示这个数字。
+# 📉 bind() 和 listen() 失败原因大揭秘
 
-        
+在网络编程中，我们必须通过 `if (func(...) < 0)` 来捕获错误。当这两个函数返回 `-1` 时，通常是因为触发了 Linux 内核的某种“保护机制”或“逻辑校验”。
+
+可以使用 `perror("函数名")` 打印具体报错信息（Error Message）。
+
+---
+
+## 1. bind() 失败的原因
+**作用**：将 socket（手机）绑定到具体的 IP 和端口（电话号码）上。
+
+| 错误代码 (errno) | 错误信息 (perror) | **核心原因 (大白话)** | **解决方案** |
+| :--- | :--- | :--- | :--- |
+| **EADDRINUSE** | `Address already in use` | **端口已被占用（最常见！）**<br>1. 你的服务器程序已经在运行了，你又启动了一个。<br>2. 另一个程序占用了这个端口。<br>3. 程序刚关，但 TCP 处于 `TIME_WAIT` 状态（端口没释放干净）。 | 1. 关掉正在跑的进程 (`kill`)。<br>2. 换个端口号 (如 8889)。<br>3. **高级招数**：使用 `setsockopt` 设置 `SO_REUSEADDR` 允许地址重用。 |
+| **EACCES** | `Permission denied` | **权限不足**<br>你想绑定 **0~1023** 号端口（特权端口），但你不是 root 用户。 | 1. 改用 **1024~65535** 的端口。<br>2. 使用 `sudo` 运行程序（不推荐）。 |
+| **EADDRNOTAVAIL** | `Cannot assign requested address` | **IP 地址无效**<br>你试图绑定一个**不属于这台电脑**的 IP 地址。<br>例如：你的本机 IP 是 `192.168.1.5`，你非要绑定 `192.168.1.6`。 | 1. 检查 IP 是否写错。<br>2. 推荐使用 `INADDR_ANY` (自动适配本机所有 IP)。 |
+| **EBADF** | `Bad file descriptor` | **fd 无效**<br>传进去的 `server_fd` 是个坏的（比如 socket 创建失败了你没处理，或者已经被 `close` 了）。 | 检查前面的 `socket()` 函数返回值是否 `< 0`。 |
+| **EINVAL** | `Invalid argument` | **重复绑定**<br>这个 socket 已经被绑定过一次了，你又绑了一次。 | 检查代码逻辑，不要重复调用 `bind`。 |
+
+
+
+---
+
+## 2. listen() 失败的原因
+**作用**：将 socket 设置为被动监听模式，准备接受连接。
+
+| 错误代码 (errno) | 错误信息 (perror) | **核心原因 (大白话)** | **解决方案** |
+| :--- | :--- | :--- | :--- |
+| **EOPNOTSUPP** | `Operation not supported` | **协议不支持（最常见！）**<br>你试图监听一个 **UDP** socket。<br>UDP 是无连接的，不需要监听，只能直接发数据。 | 1. 确认 `socket()` 时用的是 `SOCK_STREAM` (TCP)。<br>2. 如果是 UDP，删掉 `listen` 和 `accept` 代码。 |
+| **EBADF** | `Bad file descriptor` | **fd 无效**<br>同上，socket 句柄本身就是坏的。 | 检查 socket 创建逻辑。 |
+| **EDESTADDRREQ** | `Destination address required` | **未绑定地址**<br>有些系统要求 `listen` 前必须成功 `bind` (虽然大部分现代 Linux 会自动分配，但为了稳定建议先 bind)。 | 确保在 `listen` 之前调用了 `bind`。 |
+
+---
+
+## 💡 调试小贴士：如何看到上面的错误？
+
+在代码中，永远不要只写 `exit(1)`，一定要把错误打印出来！
+
+**推荐写法：**
+```c
+if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+    // perror 会自动把 errno 翻译成人类能看懂的英语句子
+    // 输出示例：Bind failed: Address already in use
+    perror("Bind failed"); 
+    exit(EXIT_FAILURE);
+}
