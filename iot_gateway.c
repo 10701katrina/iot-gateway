@@ -11,7 +11,7 @@
 
 #define PORT 8888
 #define MAX_EVENTS 100
-#define SERIAL_PORT "/dev/ttyUSB1"  // 你的板子路径
+#define SERIAL_PORT "/dev/ttyUSB0"  // 你的板子路径
 #define RB_SIZE 1024                // 缓冲区大小
 
 // ==========================================
