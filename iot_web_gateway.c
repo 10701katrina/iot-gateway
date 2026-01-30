@@ -20,6 +20,8 @@ int global_temp = 0;
 int global_humi = 0;
 int global_light = 0;
 int serial_fd = -1; // 🔥 关键：全局串口句柄
+int enable_auto_mode = 1; // 🔥 新增：1=自动托管, 0=手动接管
+int is_night_mode = 0; // 0:白天模式(灯关), 1:夜间模式(灯开)
 
 // --- 串口初始化 ---
 int open_serial(const char *device) {
@@ -49,101 +51,89 @@ void *web_server_thread(void *arg) {
     int opt = 1;
     int addrlen = sizeof(address);
 
-    // 1. 创建 Socket
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
-        perror("Web Socket failed");
-        exit(EXIT_FAILURE);
-    }
-    // 端口复用
+    // Socket 创建常规流程...
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) exit(EXIT_FAILURE);
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(WEB_PORT);
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) exit(EXIT_FAILURE);
+    if (listen(server_fd, 3) < 0) exit(EXIT_FAILURE);
 
-    // 2. 绑定 & 监听
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        perror("Web Bind failed");
-        exit(EXIT_FAILURE);
-    }
-    if (listen(server_fd, 3) < 0) {
-        perror("Web Listen failed");
-        exit(EXIT_FAILURE);
-    }
+    printf("🌐 [Web] 服务已启动: Port %d\n", WEB_PORT);
 
-    printf("🌐 [Web] 服务已启动: Port %d (支持反向控制)\n", WEB_PORT);
-
-    // 3. 循环等待连接
     while(1) {
-        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
-            continue;
-        }
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) continue;
 
-        char buffer[1024];
-        int read_len = read(new_socket, buffer, 1024);
-        if (read_len > 0) buffer[read_len] = '\0';
+        char buffer[1024] = {0};
+        read(new_socket, buffer, 1024);
+        char http_response[8192]; // 加大缓冲区以容纳新 HTML
 
-        char http_response[4096];
-
-        // 🔥 判断 1: 控制指令 (POST /toggle)
+        // 🔥 1. 手动开关灯 -> 强制切换为手动模式
         if (strstr(buffer, "POST /toggle ") != NULL) {
-            printf("🕹️ [Web] 收到开关灯指令 -> 发送给 STM32\n");
-            
-            // 往串口写指令：$CMD,LED#
-            if (serial_fd != -1) {
-                write(serial_fd, "$CMD,LED#", 9); 
-            } else {
-                printf("⚠️ 串口未连接，指令发送失败\n");
-            }
-
-            sprintf(http_response, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nOK");
+            printf("🕹️ [User] 用户手动操作 -> 🚫 AI 已暂停\n");
+            enable_auto_mode = 0; // 关掉自动模式
+            if (serial_fd != -1) write(serial_fd, "$CMD,LED#", 9);
+            is_night_mode = !is_night_mode;// 🔥🔥🔥 新增这一行：同步状态！🔥🔥🔥
+            sprintf(http_response, "HTTP/1.1 200 OK\r\n\r\nOK");
         } 
-        // 判断 2: 获取数据接口
+        // 🔥 2. 新增接口：恢复自动模式
+        else if (strstr(buffer, "POST /auto_on ") != NULL) {
+            printf("🤖 [User] 用户激活托管 -> ✅ AI 已运行\n");
+            enable_auto_mode = 1; // 开启自动模式
+            sprintf(http_response, "HTTP/1.1 200 OK\r\n\r\nOK");
+        }
+        // 3. 数据接口 (增加返回当前模式状态)
         else if (strstr(buffer, "GET /data ") != NULL) {
             sprintf(http_response, 
-                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n%d,%d,%d", 
-                global_temp, global_humi, global_light);
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n%d,%d,%d,%d", 
+                global_temp, global_humi, global_light, enable_auto_mode);
         } 
-        // 判断 3: 主页 (HTML)
+        // 4. 网页主页 (更新 HTML 界面)
         else {
             sprintf(http_response, 
                 "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n"
-                "<!DOCTYPE html><html><head><title>IoT Monitor</title>"
+                "<!DOCTYPE html><html><head><title>IoT AI Gateway</title>"
                 "<style>"
                 "body { background: #1a1a1a; color: white; font-family: sans-serif; text-align: center; margin-top: 50px; }"
-                ".card { background: #333; display: inline-block; width: 200px; padding: 20px; margin: 10px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }"
-                ".value { font-size: 50px; font-weight: bold; }"
-                ".unit { font-size: 20px; color: #aaa; }"
-                ".label { font-size: 18px; color: #bbb; margin-bottom: 10px; display: block; }"
-                "#temp { color: #ff6b6b; } #humi { color: #4ecdc4; } #light { color: #ffe66d; }"
-                ".btn { padding: 15px 30px; font-size: 20px; border-radius: 50px; border: none; background: linear-gradient(45deg, #ff6b6b, #ff8e53); color: white; cursor: pointer; margin-top: 30px; box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4); transition: transform 0.1s; }"
-                ".btn:active { transform: scale(0.95); }"
+                ".card { background: #333; display: inline-block; width: 180px; padding: 20px; margin: 10px; border-radius: 15px; }"
+                ".value { font-size: 40px; font-weight: bold; margin: 10px 0; }"
+                ".label { color: #aaa; }"
+                ".btn { padding: 15px 30px; font-size: 18px; border-radius: 50px; border: none; cursor: pointer; margin: 20px; color: white; transition: 0.2s; }"
+                "#btn-manual { background: linear-gradient(45deg, #ff6b6b, #ff8e53); }"
+                "#btn-auto { background: linear-gradient(45deg, #4ecdc4, #556270); opacity: 0.5; }"
+                ".status-badge { display: inline-block; padding: 5px 15px; border-radius: 20px; background: #555; margin-bottom: 20px; }"
+                ".active { opacity: 1 !important; box-shadow: 0 0 15px currentColor; }"
                 "</style></head>"
                 "<body>"
-                "<h1>🚀 STM32 IoT 实时监控大屏</h1>"
-                "<div class='card'><span class='label'>温度 (Temp)</span><div id='temp' class='value'>--</div><span class='unit'>℃</span></div>"
-                "<div class='card'><span class='label'>湿度 (Humi)</span><div id='humi' class='value'>--</div><span class='unit'>%%</span></div>"
-                "<div class='card'><span class='label'>光照 (Light)</span><div id='light' class='value'>--</div><span class='unit'>Lx</span></div>"
+                "<h1>🚀 STM32 智能边缘网关</h1>"
+                "<div class='status-badge'>当前模式: <span id='mode-text'>--</span></div><br>"
+                "<div class='card'><div class='label'>TEMP</div><div id='t' class='value'>--</div>℃</div>"
+                "<div class='card'><div class='label'>HUMI</div><div id='h' class='value'>--</div>%%</div>"
+                "<div class='card'><div class='label'>LIGHT</div><div id='l' class='value'>--</div>Lx</div>"
                 "<br>"
-                "<button class='btn' onclick='toggleLed()'>💡 远程开关灯</button>"
+                "<button id='btn-manual' class='btn' onclick='manualToggle()'>🕹️ 手动开关 (Manual)</button>"
+                "<button id='btn-auto' class='btn' onclick='enableAuto()'>🤖 恢复托管 (Auto)</button>"
                 "<script>"
-                "function updateData() {"
-                "  fetch('/data').then(res => res.text()).then(txt => {"
-                "    let parts = txt.split(',');"
-                "    document.getElementById('temp').innerText = parts[0];"
-                "    document.getElementById('humi').innerText = parts[1];"
-                "    document.getElementById('light').innerText = parts[2];"
-                "  }).catch(e=>{});"
+                "function manualToggle() { fetch('/toggle', {method:'POST'}); updateUI(0); }"
+                "function enableAuto() { fetch('/auto_on', {method:'POST'}); updateUI(1); }"
+                "function updateUI(mode) {"
+                "  document.getElementById('mode-text').innerText = mode ? '🤖 AI 托管中' : '🕹️ 手动控制中';"
+                "  document.getElementById('mode-text').style.color = mode ? '#4ecdc4' : '#ff6b6b';"
+                "  document.getElementById('btn-auto').style.opacity = mode ? '1' : '0.5';"
                 "}"
-                "function toggleLed() {"
-                "  fetch('/toggle', {method: 'POST'}).then(console.log('Command Sent'));"
-                "}"
-                "setInterval(updateData, 1000);"
-                "</script>"
-                "</body></html>"
+                "setInterval(() => {"
+                "  fetch('/data').then(r=>r.text()).then(t => {"
+                "    let d = t.split(',');"
+                "    document.getElementById('t').innerText=d[0];"
+                "    document.getElementById('h').innerText=d[1];"
+                "    document.getElementById('l').innerText=d[2];"
+                "    updateUI(parseInt(d[3]));"
+                "  });"
+                "}, 1000);"
+                "</script></body></html>"
             );
         }
-
         write(new_socket, http_response, strlen(http_response));
         close(new_socket);
     }
@@ -151,6 +141,7 @@ void *web_server_thread(void *arg) {
 
 // --- 主程序 ---
 int main() {
+
     // 1. 打开串口 (赋值给全局变量)
     serial_fd = open_serial(SERIAL_PORT);
     if (serial_fd < 0) {
@@ -196,6 +187,27 @@ int main() {
                             global_humi = h;
                             global_light = l;
                             printf("📥 [更新] T:%d H:%d L:%d\n", t, h, l);
+
+                        
+                            // --- 🤖 边缘计算逻辑 ---
+
+                            // 🔥 加上这个 if 判断！只有允许自动模式时，才执行下面的代码
+                            if (enable_auto_mode == 1) { 
+                                
+                                // 场景 A: 天黑 开灯
+                                if (l < 20 && is_night_mode == 0) {
+                                    printf("🌙 [AI] 天黑 -> 自动开灯\n");
+                                    if (serial_fd != -1) write(serial_fd, "$CMD,LED#", 9);
+                                    is_night_mode = 1;
+                                }
+                                
+                                // 场景 B: 天亮 关灯
+                                else if (l > 35 && is_night_mode == 1) {
+                                    printf("☀️ [AI] 天亮 -> 自动关灯\n");
+                                    if (serial_fd != -1) write(serial_fd, "$CMD,LED#", 9);
+                                    is_night_mode = 0;
+                                }
+                            }
                         }
                     } else {
                         if (data_idx < 63) data_buf[data_idx++] = c;
