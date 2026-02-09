@@ -14,7 +14,7 @@ int main() {
     int opt = 1;
 
     // 1. 创建 Socket (还是那套标准动作)
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("Socket failed");
         exit(EXIT_FAILURE);
     }
@@ -54,6 +54,8 @@ int main() {
         }
 
         // --- 握手成功！浏览器连上来了 ---
+
+        //当你刷新网页时，对于服务器来说，这是一个全新的连接，全新的 new_socket。 因为 new_socket 是在 accept 之后才生成的（在循环里），所以你必须在循环里拿着这个新的 new_socket 去发送数据。
         
         // 这里可以读取浏览器发了什么，但我们暂时忽略，直接回复它
         

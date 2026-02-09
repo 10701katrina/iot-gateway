@@ -17,7 +17,7 @@ int main() {
     //server_fd (监听 socket) = 站在酒店门口的迎宾员。【建立连接】
     //client_fd (已连接 socket) = 专门服务某个房间的服务员。【传输数据】
     struct sockaddr_in address;
-    //ockaddr = Socket Address (套接字地址)
+    //sockaddr = Socket Address (套接字地址)
     //_in = Internet (互联网/IPv4)
     //这是 Linux 网络编程中用来专门存放 IPv4 地址信息的结构体。
     int addr_len = sizeof(address);
