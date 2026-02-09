@@ -1,8 +1,27 @@
-# 1. 忽略所有文件
-*
+# --- Keil 垃圾文件过滤 ---
+*.o
+*.d
+*.crf
+*.dep
+*.axf
+*.htm
+*.lnp
+*.sct
+*.lst
+*.map
+*.iex
+*.uvoptx
+*.uvguix.*
+JLinkLog.txt
+*.bak
+*.uvgui.*
 
-# 2. 但是不要忽略 .gitignore 本身 (这行很重要)
-!.gitignore
+# 忽略 Keil 生成的临时文件夹
+Listings/
+Objects/
+MDK-ARM/RTE/
+DebugConfig/
 
-# 3. 不要忽略我想要的那一个文件
-!iot_web_gateway_new.c
+# --- 允许上传的文件 ---
+# 既然是白名单模式太麻烦，我们上面已经过滤了垃圾
+# 剩下的 .c, .h, .s, .uvprojx (工程文件) 都会被自动保留
