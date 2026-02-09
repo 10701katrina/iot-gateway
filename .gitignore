@@ -1,0 +1,8 @@
+# 1. 忽略所有文件
+*
+
+# 2. 但是不要忽略 .gitignore 本身 (这行很重要)
+!.gitignore
+
+# 3. 不要忽略我想要的那一个文件
+!iot_web_gateway_new.c
