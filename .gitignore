@@ -1,8 +1,11 @@
-# 1. 忽略所有文件
-*
+# 忽略笔记
+Note/
 
-# 2. 但是不要忽略 .gitignore 本身 (这行很重要)
+# 忽略相机代码 (如果你不想传的话)
+V4L2_Camera/
+
+# 忽略所有隐藏文件 (比如 .vscode)
+.*
+
+# 但是！保留 .gitignore 自己
 !.gitignore
-
-# 3. 不要忽略我想要的那一个文件
-!iot_web_gateway_new.c
