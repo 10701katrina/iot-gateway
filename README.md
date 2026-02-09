@@ -1,18 +1,26 @@
 
 # 🚀 基于 Linux 与 RTOS 的多线程智能边缘网关
 **Smart Edge Gateway V2.0**
-### 系统架构图
-
-```mermaid
-graph TD
-    %% 这里粘贴我刚才给你的【视图一】的所有代码
-    classDef linux fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
-    classDef stm32 fill:#fff3e0,stroke:#f57c00,stroke-width:2px;
-    %% ... (省略中间代码) ...
-    class FreeRTOS,HAL stm32;
-```
 
 > 一个集成了 **STM32 数据采集**、**FreeRTOS 实时调度** 与 **Linux 多线程边缘计算** 的完整 AIoT 解决方案。
+
+---
+
+### 🏗️ 系统架构设计
+
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/ef17456c-2f6f-4f9d-b546-713bedf52031" width="800" alt="系统级高层架构图">
+  <br>
+  <em><b>图 1：系统级全链路交互架构 (Macro View)</b><br>展示从物理感知层、STM32 硬件层到 Linux 边缘网关及用户端的完整数据流向。</em>
+</div>
+
+<br>
+
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/b3bcb3c4-e854-4931-a151-8c7b6e204ff0" width="800" alt="Linux 软件内部架构图">
+  <br>
+  <em><b>图 2：Linux 软件内部核心机制 (Micro View)</b><br>基于“生产者-消费者”模型，详解多线程并发、环形缓冲区及同步互斥的技术实现。</em>
+</div>
 
 ---
 
@@ -51,7 +59,7 @@ graph TD
 * **构建工具**：GCC, Makefile
 
 ### 🔌 STM32 硬件端 (Hardware & Firmware)
-* **MCU**：STM32F103C8T6
+* **MCU**：STM32F407ZGT6
 * **操作系统**：FreeRTOS (任务调度/消息队列)
 * **传感器**：DHT11 (温湿度), LDR (光敏电阻)
 * **通信接口**：UART (串口 DMA/中断)
